@@ -64,7 +64,7 @@ public class HttpServer {
 	 * Syntactic sugar para passar um método como Handler
 	 */
 	public HttpServer configurarArquivosEstaticos(String diretorio) {
-        StaticFilesHandler handler = new StaticFilesHandler();
+        StaticFilesHandler handler = new StaticFilesHandler(diretorio);
         router.fallback(handler::servir);
         return this;
     }
@@ -86,7 +86,7 @@ public class HttpServer {
             try {
                 Socket socketCliente = serverSocket.accept();
                 ClientHandler tarefa = new ClientHandler(socketCliente, router);
-                poolDeThreads.execute((Runnable) tarefa);
+                poolDeThreads.execute(tarefa);
             } catch (IOException e) {
                 if (rodando) {
                     System.err.println("Erro ao aceitar conexão: " + e.getMessage());

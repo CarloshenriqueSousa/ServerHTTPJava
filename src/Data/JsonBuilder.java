@@ -40,6 +40,10 @@ public class JsonBuilder {
 	public JsonBuilder add(String chave, boolean valor) {
 		return add(chave, (Object) valor);
 	}
+
+	public JsonBuilder add(String chave, long valor) {
+		return add(chave, (Object) valor);
+	}
 	
 	private void adicionarValor(Object valor) {
 		if(valor == null) {
@@ -58,7 +62,8 @@ public class JsonBuilder {
 			List<?> lista = (List<?>) valor;
 			sb.append("[");
 			for(int i = 0; i < lista.size(); i++) {
-				adicionarValor(lista.get(1));
+				if (i > 0) sb.append(",");
+				adicionarValor(lista.get(i));
 			}
 			sb.append("]");
 		} else {
@@ -96,5 +101,10 @@ public class JsonBuilder {
 				.build();
 	}
 	
-	public static String sucess;
- }
+	public static String sucesso(String mensagem) {
+		return new JsonBuilder()
+				.add("status", "success")
+				.add("message", mensagem)
+				.build();
+	}
+}

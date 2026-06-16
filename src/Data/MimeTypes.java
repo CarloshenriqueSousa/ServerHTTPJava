@@ -44,9 +44,9 @@ public class MimeTypes {
 	}
 	
 	public static String porCaminho(String caminho) {
-		int ponto = caminho.lastIndexOf(".");
-		if(ponto == -1 || ponto == caminho.length() -1) {
-			return porExtensao(caminho.substring(ponto + 1));
+		int ponto = caminho.lastIndexOf('.');
+		if (ponto == -1 || ponto == caminho.length() - 1) {
+			return "application/octet-stream";
 		}
 		return porExtensao(caminho.substring(ponto + 1));
 	}

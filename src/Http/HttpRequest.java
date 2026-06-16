@@ -3,51 +3,48 @@ package Http;
 import java.util.*;
 import java.io.*;
 import Http.HttpMethod;
+import Security.User;
 
 /**
- * CONCEITO: Imutabilidade + Fábrica estática Esta classe representa uma
- * requisição HTTP já parseada ( ou seja, transformado em um bloco de texto como
- * objeto direto para poder ser interpretado pelo navegado ) Uma vez criada, não
- * pode ser modificada, usada todas como final usamos sempre um construtor
- * privado + método fábrica estático para garantir que objetos saiam sempre em
- * um estádo válido
+ * CONCEITO: Imutabilidade + Fábrica estática 
+ * Versão atualizada com Proteção de Buffer e Limites Anti-DoS corporativos.
  */
 public class HttpRequest {
+	
+	private User user;
 
-	// Incapsulados e imutáveis
+	// LIMITES DE SEGURANÇA DE INFRAESTRUTURA
+	private static final int MAX_HEADER_SIZE = 8192;       // 8KB máximo para cabeçalhos (Padrão Apache/Nginx)
+	private static final int MAX_BODY_SIZE = 10485760;     // 10MB máximo para uploads/corpo no workspace
+
 	private final HttpMethod metodo;
 	private final String caminho;
 	private final String versaoHttp;
+	private final String ipCliente;
 	private final Map<String, String> cabecalhos;
 	private final Map<String, String> parametrosQuery;
 	private final String corpo;
 
-	// Construtor privado: só irá chamar por parse()
 	private HttpRequest(HttpMethod metodo, String caminho, String versaoHttp, Map<String, String> cabecalhos,
-			Map<String, String> parametrosQuery, String corpo) {
+			Map<String, String> parametrosQuery, String corpo, String ipCliente) {
 		this.metodo = metodo;
 		this.caminho = caminho;
 		this.versaoHttp = versaoHttp;
 		this.cabecalhos = cabecalhos;
 		this.parametrosQuery = parametrosQuery;
 		this.corpo = corpo;
+		this.ipCliente = ipCliente;
 	}
 
-	/**
-	 * CONCEITO: i/o com stremas
-	 * InputStream é o fluxo bruto de butes do socket
-	 * InputStreamReader converte bytes em caracters ( com charset)
-	 * BufferedReader adiciona buffer e o método readLine()
-	 * 
-	 * camadas:
-	 * socket -> inputStream -> InputStreamReader -> BufferedReader
-	 */
 	public static HttpRequest parse(InputStream entrada) throws IOException {
-		BufferedReader leitor = new BufferedReader(new InputStreamReader (entrada));
+		return parse(entrada, "desconhecido");
+	}
+
+	public static HttpRequest parse(InputStream entrada, String ipCliente) throws IOException {
+		BufferedReader leitor = new BufferedReader(new InputStreamReader(entrada));
 		
 		/**
-		 * PASSO 1: Linha de requisicao
-		 * FORMATO: GET/caminho?query HTTP/1.1
+		 * PASSO 1: Linha de requisição
 		 */
 		String linhaDeRequisicao = leitor.readLine();
 		if (linhaDeRequisicao == null || linhaDeRequisicao.isBlank()) {
@@ -65,48 +62,132 @@ public class HttpRequest {
 		
 		/**
 		 * PASSO 2: Separar caminho dos parâmetros de Query
-		 * busca?termo=java&pagina=1 -> caminho=/busca, params=...
 		 */
-		 String caminho;
-		 Map<String, String> parametrosQuery = new HashMap<>();
+		String caminho;
+		Map<String, String> parametrosQuery = new HashMap<>();
 		 
-		 int ponto = caminhoCompleto.indexOf('?');
-		 if (ponto != -1) {
-			 caminho = caminhoCompleto.substring(0, ponto);
-			 parsearQueryString(caminhoCompleto.substring(ponto + 1), parametrosQuery);
-		 } else {
-			 caminho = caminhoCompleto;
-		 }
+		int ponto = caminhoCompleto.indexOf('?');
+		if (ponto != -1) {
+			caminho = caminhoCompleto.substring(0, ponto);
+			parsearQueryString(caminhoCompleto.substring(ponto + 1), parametrosQuery);
+		} else {
+			caminho = caminhoCompleto;
+		}
 		 
-		 /**
-		  * PASSO 3: Leitura dos cabeçalhos
-		  * Cada linha tem formato nome=valor
-		  * A linha em braco "" indica o fim dos cabeça~hos
-		  */
-		 Map<String, String> cabecalhos = new HashMap<>();
-		 String linha;
-		 while ((linha = leitor.readLine()) != null && !linha.isEmpty()) {
-			 int doisPontos = linha.indexOf(':');
-			 if (doisPontos != -1) {
-				 String nome = linha.substring(0, doisPontos).trim().toLowerCase();
-				 String valor = linha.substring(doisPontos + 1).trim();
-				 cabecalhos.put(nome, valor);
-			 }
-		 }
+		/**
+		 * PASSO 3: Leitura dos cabeçalhos com Trava Anti-DoS
+		 */
+		Map<String, String> cabecalhos = new HashMap<>();
+		String linha;
+		int totalHeaderBytes = 0;
+
+		while ((linha = leitor.readLine()) != null && !linha.isEmpty()) {
+			// Defesa contra estouro de memória por cabeçalhos gigantes
+			totalHeaderBytes += linha.length();
+			if (totalHeaderBytes > MAX_HEADER_SIZE) {
+				throw new IOException("Ataque DoS Detectado: Tamanho dos cabeçalhos excedeu o limite seguro de 8KB.");
+			}
+
+			int doisPontos = linha.indexOf(':');
+			if (doisPontos != -1) {
+				String nome = linha.substring(0, doisPontos).trim().toLowerCase();
+				String valor = linha.substring(doisPontos + 1).trim();
+				cabecalhos.put(nome, valor);
+			}
+		}
 		 
-		 /**
-		  * PASSO 4: Ler corpo se Content-Lenght estiver presente
-		  * apenas OST, PUT e etc enviam corpo normalmente
-		  */
-		 
-		 String corpo = "";
-		 String tamanhoStr = cabecalhos.get("Content-lenght");
-		 if
+		/**
+		 * PASSO 4: Ler corpo com Trava de Alocação de Memória (Anti-OOM)
+		 */
+		String corpo = "";
+		String tamanhoStr = cabecalhos.get("content-length");
+		if (tamanhoStr != null) {
+			try {
+				int tamanho = Integer.parseInt(tamanhoStr.trim());
+				
+				// Defesa: Impede a alocação de buffers gigantescos na heap do Java
+				if (tamanho > MAX_BODY_SIZE) {
+					throw new IOException("Payload Too Large: O corpo da requisição excede o limite máximo de 10MB.");
+				}
+
+				if (tamanho > 0) {
+					char[] buffer = new char[tamanho];
+					int lidos = leitor.read(buffer, 0, tamanho);
+					if (lidos > 0) {
+						corpo = new String(buffer, 0, lidos);
+					}
+				}
+			} catch (NumberFormatException e) {
+				// Content-Length inválido → ignora o corpo de forma segura
+			}
+		}
+		        
+		return new HttpRequest(metodo, caminho, versaoHttp, cabecalhos, parametrosQuery, corpo, ipCliente);
 	}
 	
+	private static void parsearQueryString(String query, Map<String, String> params) {
+		String[] pares = query.split("&");
+		for (String par: pares) {
+			String[] kv = par.split("=", 2);
+			if (kv.length == 2) {
+				params.put(decodificarUrl(kv[0]), decodificarUrl(kv[1]));
+			} else if (kv.length == 1 && !kv[0].isBlank()) {
+				params.put(decodificarUrl(kv[0]), "");
+			}
+		}
+	}
 	
+	private static String decodificarUrl(String s) {
+		return s.replace("+", " ")
+				.replace("%20", " ")
+				.replace("%3A", ":")
+				.replace("%2F", "/");
+	}
+
+	public HttpMethod getMetodo() { return metodo; }
+	public String getCaminho() { return caminho; }
+	public String getVersaoHttp() { return versaoHttp; }
+	public String getIpCliente() { return ipCliente; }
+
+	public String getCabecalhos(String nome) {
+		return cabecalhos.getOrDefault(nome.toLowerCase(), "");
+	}
+
+	public String getCookie(String nome) {
+		String cookies = getCabecalhos("cookie");
+		if (cookies.isBlank()) {
+			return "";
+		}
+
+		for (String parte : cookies.split(";")) {
+			String[] kv = parte.trim().split("=", 2);
+			if (kv.length == 2 && kv[0].trim().equalsIgnoreCase(nome)) {
+				return kv[1].trim();
+			}
+		}
+		return "";
+	}
+
+	public String getParametrosQuery(String nome) {
+		return parametrosQuery.getOrDefault(nome, "");
+	}
 	
-	private static void parsearQueryString() {
-		
+	public Map<String, String> getParametrosQuery() {
+		return Collections.unmodifiableMap(parametrosQuery);
+	}
+
+	public String getCorpo() { return corpo; }
+	
+	@Override
+	public String toString() {
+		return metodo + " " + caminho + " [" + versaoHttp + "] ";
+	}
+	
+	public void setUser(User user) {
+		this.user = user;
+	}
+	
+	public User getUser() {
+		return user;
 	}
 }

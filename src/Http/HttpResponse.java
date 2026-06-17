@@ -80,6 +80,16 @@ public class HttpResponse {
 				.json(JsonBuilder.erro(msg));
 	}
 
+	/**
+	 * Cria resposta de redirecionamento HTTP 302.
+	 * Pode ser encadeada com .cookie() para setar cookies durante o redirect.
+	 */
+	public static HttpResponse redirect(String url) {
+		return new HttpResponse()
+				.status(HttpStatus.FOUND)
+				.cabecalho("Location", url);
+	}
+
 	public HttpResponse cabecalho(String nome, String valor) {
 		cabecalhos.put(nome, valor);
 		return this;

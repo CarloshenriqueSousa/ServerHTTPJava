@@ -177,6 +177,18 @@ public class HttpRequest {
 	}
 
 	public String getCorpo() { return corpo; }
+
+	/**
+	 * Parseia o corpo da requisição como dados de formulário (application/x-www-form-urlencoded).
+	 * Reutiliza o parser de query string existente.
+	 */
+	public Map<String, String> getFormData() {
+		Map<String, String> form = new HashMap<>();
+		if (corpo != null && !corpo.isBlank()) {
+			parsearQueryString(corpo, form);
+		}
+		return form;
+	}
 	
 	@Override
 	public String toString() {

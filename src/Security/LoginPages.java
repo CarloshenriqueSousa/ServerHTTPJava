@@ -21,7 +21,7 @@ public final class LoginPages {
 				    body {
 				      margin: 0; min-height: 100vh; display: grid; place-items: center;
 				      font-family: 'Segoe UI', system-ui, sans-serif;
-				      background: linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #0f172a 100%);
+				      background: linear-gradient(135deg, #0f172a 0%%, #1e293b 50%%, #0f172a 100%%);
 				      color: #e2e8f0;
 				    }
 				    .card {
@@ -33,12 +33,12 @@ public final class LoginPages {
 				    p.sub { margin: 0 0 24px; color: #94a3b8; font-size: 0.95rem; }
 				    label { display: block; margin-bottom: 6px; font-size: 0.85rem; color: #cbd5e1; }
 				    input {
-				      width: 100%; padding: 12px 14px; margin-bottom: 16px; border-radius: 8px;
+				      width: 100%%; padding: 12px 14px; margin-bottom: 16px; border-radius: 8px;
 				      border: 1px solid #475569; background: #0f172a; color: #f1f5f9;
 				    }
 				    input:focus { outline: 2px solid #3b82f6; border-color: #3b82f6; }
 				    button {
-				      width: 100%; padding: 12px; border: none; border-radius: 8px;
+				      width: 100%%; padding: 12px; border: none; border-radius: 8px;
 				      background: #2563eb; color: white; font-weight: 600; cursor: pointer;
 				    }
 				    button:hover { background: #1d4ed8; }
